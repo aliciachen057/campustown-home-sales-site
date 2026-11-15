@@ -83,6 +83,64 @@
       text-align: right;
     }
 
+    .city-picker {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .city-picker label {
+      color: #33425c;
+      font-size: 0.9rem;
+      font-weight: 800;
+    }
+
+    .city-picker select {
+      min-width: 13rem;
+      padding: 0.65rem 2.25rem 0.65rem 0.75rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 0.45rem;
+      background: #fff;
+      color: #172033;
+      font: inherit;
+    }
+
+    .city-picker select:focus {
+      outline: 3px solid rgb(75 166 154 / 30%);
+      border-color: #287d76;
+    }
+
+    .city-details {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.8rem;
+      margin-bottom: 2rem;
+    }
+
+    .metric {
+      padding: 1rem;
+      border: 1px solid #e1e7ef;
+      border-radius: 0.7rem;
+      background: #f8fafc;
+    }
+
+    .metric-label {
+      display: block;
+      margin-bottom: 0.35rem;
+      color: #66738a;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .metric-value {
+      color: #152238;
+      font-size: clamp(1.05rem, 2.5vw, 1.4rem);
+      font-weight: 800;
+    }
+
     .chart {
       display: grid;
       gap: 0.8rem;
@@ -174,6 +232,19 @@
         text-align: left;
       }
 
+      .city-picker {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .city-picker select {
+        width: 100%;
+      }
+
+      .city-details {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
       .bar-row {
         grid-template-columns: minmax(6.7rem, 8.5rem) 1fr;
         gap: 0.65rem;
@@ -204,6 +275,28 @@
         <p id="summary" class="summary"></p>
       </div>
       <div id="status" class="status" role="status">Loading sale data…</div>
+      <div id="city-controls" class="city-picker" hidden>
+        <label for="city-select">Choose a city</label>
+        <select id="city-select"></select>
+      </div>
+      <div id="city-details" class="city-details" aria-live="polite" hidden>
+        <div class="metric">
+          <span class="metric-label">Median sale price</span>
+          <span id="median-price" class="metric-value"></span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Home sales</span>
+          <span id="sale-count" class="metric-value"></span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Lowest sale price</span>
+          <span id="minimum-price" class="metric-value"></span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Highest sale price</span>
+          <span id="maximum-price" class="metric-value"></span>
+        </div>
+      </div>
       <div id="chart" class="chart" role="list" aria-label="Median home sale price by city"></div>
       <p class="note"><strong>Calculation note:</strong> Home sales under $10,000 are excluded because the source identifies some prices in that range as impossible. Prices are rounded to whole dollars.</p>
     </section>
@@ -296,10 +389,46 @@
             city: group.city,
             state: group.state,
             sales: group.prices.length,
-            median: median(group.prices)
+            median: median(group.prices),
+            minimum: group.prices[0],
+            maximum: group.prices[group.prices.length - 1]
           };
         })
         .sort((a, b) => b.median - a.median || a.city.localeCompare(b.city));
+    }
+
+    function renderCityPicker(results) {
+      const controls = document.querySelector("#city-controls");
+      const select = document.querySelector("#city-select");
+      const options = [...results]
+        .sort((a, b) => a.city.localeCompare(b.city))
+        .map((result) => {
+          const option = document.createElement("option");
+          option.value = `${result.city}|${result.state}`;
+          option.textContent = `${result.city}, ${result.state}`;
+          return option;
+        });
+
+      select.replaceChildren(...options);
+      select.addEventListener("change", () => {
+        const selected = results.find((result) =>
+          `${result.city}|${result.state}` === select.value
+        );
+        if (selected) {
+          renderCityDetails(selected);
+        }
+      });
+      controls.hidden = false;
+      select.value = `${results[0].city}|${results[0].state}`;
+      renderCityDetails(results[0]);
+    }
+
+    function renderCityDetails(result) {
+      document.querySelector("#median-price").textContent = currency.format(result.median);
+      document.querySelector("#sale-count").textContent = result.sales.toLocaleString("en-US");
+      document.querySelector("#minimum-price").textContent = currency.format(result.minimum);
+      document.querySelector("#maximum-price").textContent = currency.format(result.maximum);
+      document.querySelector("#city-details").hidden = false;
     }
 
     function renderChart(results) {
@@ -334,7 +463,10 @@
       })
       .then(parseCsv)
       .then(calculateCityMedians)
-      .then(renderChart)
+      .then((results) => {
+        renderCityPicker(results);
+        renderChart(results);
+      })
       .catch((error) => {
         const status = document.querySelector("#status");
         status.className = "status error";
