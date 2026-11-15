@@ -24,7 +24,7 @@
     main {
       width: min(100% - 2rem, 76rem);
       margin: 0 auto;
-      padding: clamp(2.5rem, 7vw, 5.5rem) 0 3rem;
+      padding: clamp(2rem, 6vw, 4.5rem) 0 3rem;
     }
 
     .eyebrow {
@@ -51,6 +51,40 @@
       color: #536078;
       font-size: clamp(1rem, 2vw, 1.18rem);
       line-height: 1.65;
+    }
+
+    .summary-cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+
+    .summary-card {
+      min-width: 0;
+      padding: 1.25rem 1.4rem;
+      border: 1px solid #dfe5ef;
+      border-radius: 1rem;
+      background: linear-gradient(145deg, #ffffff, #f3f8f8);
+      box-shadow: 0 0.75rem 2rem rgb(26 39 68 / 6%);
+    }
+
+    .summary-card-label {
+      display: block;
+      margin-bottom: 0.45rem;
+      color: #66738a;
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .summary-card-value {
+      display: block;
+      color: #152238;
+      font-size: clamp(1.45rem, 3vw, 2rem);
+      font-weight: 850;
+      letter-spacing: -0.035em;
     }
 
     .dashboard {
@@ -88,6 +122,10 @@
       align-items: center;
       gap: 0.8rem;
       margin-bottom: 1.5rem;
+      padding: 0.9rem 1rem;
+      border: 1px solid #e1e7ef;
+      border-radius: 0.75rem;
+      background: #f8fafc;
     }
 
     .city-picker label {
@@ -97,13 +135,14 @@
     }
 
     .city-picker select {
-      min-width: 13rem;
+      min-width: min(13rem, 100%);
       padding: 0.65rem 2.25rem 0.65rem 0.75rem;
       border: 1px solid #cbd5e1;
       border-radius: 0.45rem;
       background: #fff;
       color: #172033;
       font: inherit;
+      cursor: pointer;
     }
 
     .city-picker select:focus {
@@ -144,6 +183,7 @@
     .chart {
       display: grid;
       gap: 0.8rem;
+      overflow-x: auto;
     }
 
     .bar-row {
@@ -168,6 +208,7 @@
       height: 2.25rem;
       border-radius: 0.45rem;
       background: #edf2f7;
+      overflow: hidden;
     }
 
     .bar {
@@ -183,6 +224,12 @@
       font-weight: 800;
       white-space: nowrap;
       transition: width 400ms ease;
+    }
+
+    .bar:focus-visible,
+    .city-picker select:focus-visible {
+      outline: 3px solid rgb(75 166 154 / 30%);
+      outline-offset: 2px;
     }
 
     .note {
@@ -218,6 +265,16 @@
         padding-top: 2.5rem;
       }
 
+      .summary-cards {
+        grid-template-columns: 1fr;
+        gap: 0.7rem;
+        margin-top: 1.5rem;
+      }
+
+      .summary-card {
+        padding: 1rem 1.1rem;
+      }
+
       .dashboard {
         padding: 1rem;
         border-radius: 0.9rem;
@@ -235,10 +292,12 @@
       .city-picker {
         align-items: flex-start;
         flex-direction: column;
+        gap: 0.55rem;
       }
 
       .city-picker select {
         width: 100%;
+        min-width: 0;
       }
 
       .city-details {
@@ -246,7 +305,7 @@
       }
 
       .bar-row {
-        grid-template-columns: minmax(6.7rem, 8.5rem) 1fr;
+        grid-template-columns: minmax(6.7rem, 9rem) minmax(15rem, 1fr);
         gap: 0.65rem;
       }
 
@@ -268,6 +327,21 @@
       <h1>College Town Home Sales Dashboard</h1>
       <p class="intro">Explore the typical home sale price across the cities in this college-town dataset. Each bar shows the median sale price for one city, calculated from completed sales in the source data.</p>
     </header>
+
+    <section id="summary-cards" class="summary-cards" aria-label="Dataset summary" hidden>
+      <article class="summary-card">
+        <span class="summary-card-label">Home sales included</span>
+        <span id="overall-sales" class="summary-card-value"></span>
+      </article>
+      <article class="summary-card">
+        <span class="summary-card-label">Overall median sale price</span>
+        <span id="overall-median" class="summary-card-value"></span>
+      </article>
+      <article class="summary-card">
+        <span class="summary-card-label">Cities included</span>
+        <span id="overall-cities" class="summary-card-value"></span>
+      </article>
+    </section>
 
     <section class="dashboard" aria-labelledby="chart-title">
       <div class="chart-heading">
@@ -366,8 +440,9 @@
         : values[middle];
     }
 
-    function calculateCityMedians(rows) {
+    function calculateDashboardData(rows) {
       const groups = new Map();
+      const includedPrices = [];
 
       rows.forEach((row) => {
         const salePrice = Number(row.sale_price);
@@ -375,6 +450,7 @@
           return;
         }
 
+        includedPrices.push(salePrice);
         const key = `${row.city}|${row.state}`;
         if (!groups.has(key)) {
           groups.set(key, { city: row.city, state: row.state, prices: [] });
@@ -382,7 +458,7 @@
         groups.get(key).prices.push(salePrice);
       });
 
-      return [...groups.values()]
+      const cities = [...groups.values()]
         .map((group) => {
           group.prices.sort((a, b) => a - b);
           return {
@@ -395,6 +471,23 @@
           };
         })
         .sort((a, b) => b.median - a.median || a.city.localeCompare(b.city));
+
+      includedPrices.sort((a, b) => a - b);
+      return {
+        cities,
+        includedSales: includedPrices.length,
+        overallMedian: median(includedPrices)
+      };
+    }
+
+    function renderSummary(data) {
+      document.querySelector("#overall-sales").textContent =
+        data.includedSales.toLocaleString("en-US");
+      document.querySelector("#overall-median").textContent =
+        currency.format(data.overallMedian);
+      document.querySelector("#overall-cities").textContent =
+        data.cities.length.toLocaleString("en-US");
+      document.querySelector("#summary-cards").hidden = false;
     }
 
     function renderCityPicker(results) {
@@ -410,14 +503,14 @@
         });
 
       select.replaceChildren(...options);
-      select.addEventListener("change", () => {
+      select.onchange = () => {
         const selected = results.find((result) =>
           `${result.city}|${result.state}` === select.value
         );
         if (selected) {
           renderCityDetails(selected);
         }
-      });
+      };
       controls.hidden = false;
       select.value = `${results[0].city}|${results[0].state}`;
       renderCityDetails(results[0]);
@@ -440,12 +533,18 @@
         const row = document.createElement("div");
         row.className = "bar-row";
         row.setAttribute("role", "listitem");
-        row.innerHTML = `
-          <div class="city-label" title="${result.city}, ${result.state}">${result.city}, ${result.state}</div>
-          <div class="bar-track">
-            <div class="bar" style="width: ${(result.median / maximum) * 100}%">${currency.format(result.median)}</div>
-          </div>
-        `;
+        const label = document.createElement("div");
+        label.className = "city-label";
+        label.title = `${result.city}, ${result.state}`;
+        label.textContent = `${result.city}, ${result.state}`;
+        const track = document.createElement("div");
+        track.className = "bar-track";
+        const bar = document.createElement("div");
+        bar.className = "bar";
+        bar.style.width = `${(result.median / maximum) * 100}%`;
+        bar.textContent = currency.format(result.median);
+        track.append(bar);
+        row.append(label, track);
         return row;
       }));
 
@@ -462,10 +561,11 @@
         return response.text();
       })
       .then(parseCsv)
-      .then(calculateCityMedians)
-      .then((results) => {
-        renderCityPicker(results);
-        renderChart(results);
+      .then(calculateDashboardData)
+      .then((data) => {
+        renderSummary(data);
+        renderCityPicker(data.cities);
+        renderChart(data.cities);
       })
       .catch((error) => {
         const status = document.querySelector("#status");
